@@ -18,7 +18,6 @@ struct CameraView: View {
     
     var body: some View {
         ZStack {
-            // Going to be camera preview
             CameraPreview(camera: camera)
                 .ignoresSafeArea(.all, edges: .all)
             
@@ -27,27 +26,24 @@ struct CameraView: View {
                     HStack {
                         Spacer()
                         
-                        Button(action: {}, label: {
-                            Spacer()
-                            
-                            Button(action: camera.reTake, label: {
-                                Image(systemName: "arrow.triangle.2.circlepath.camera")
-                                    .foregroundColor(.black)
-                                    .padding()
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                            })
+                        Button(action: camera.reTake, label: {
+                            Image(systemName: "arrow.triangle.2.circlepath.camera")
+                                .foregroundColor(.black)
+                                .padding()
+                                .background(Color.white)
+                                .clipShape(Circle())
                         })
                         .padding(.trailing, 10)
                     }
                 }
-                    
-                    Spacer()
+                
+                Spacer()
+                
                 HStack {
                     // if taken showing save and again take button...
                     if camera.isTaken {
-                        Button(action: {}, label: {
-                            Text("Save")
+                        Button(action: {if !camera.isSaved{camera.savePic()}}, label: {
+                            Text(camera.isSaved ? "Saved" : "Save")
                                 .foregroundColor(.black)
                                 .fontWeight(.semibold)
                                 .padding(.vertical, 10)
@@ -93,8 +89,12 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
     @Published var output = AVCapturePhotoOutput()
     // preview...
     @Published var preview: AVCaptureVideoPreviewLayer!
+    // pic data...
+    @Published var isSaved = false
+    @Published var picData = Data(count: 0)
     
     func Check() {
+        print("Is this thing on?")
         // first checking camera has got permission...
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -103,8 +103,7 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
             // Setting up session
         case .notDetermined:
             // requesting permission
-            AVCaptureDevice.requestAccess(for: .video) {
-                (status) in
+            AVCaptureDevice.requestAccess(for: .video) { (status) in
                 if status {
                     self.setUp()
                 }
@@ -151,8 +150,8 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
     }
     
     func takePic() {
+        self.output.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
         DispatchQueue.global(qos: .background).async {
-            self.output.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
             self.session.stopRunning()
             
             DispatchQueue.main.async {
@@ -171,15 +170,34 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
                 withAnimation{
                     self.isTaken.toggle()
                 }
+                // clearing
+                self.isTaken = false
+                self.isSaved = false
+                self.picData = Data(count: 0)
             }
         }
     }
     
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        print("Finished processing photo")
         if error != nil {
+            print("Ruh roh")
             return
         }
-        print("pic taken...")
+        print("Snap!")
+        guard let imageData = photo.fileDataRepresentation() else {return}
+        self.picData = imageData
+    }
+    
+    func savePic() {
+        print("Thinking about saving...")
+        print(self.picData)
+        guard let image = UIImage(data: self.picData) else {return}
+        print("Saving")
+        // saving image...
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        self.isSaved = true
+        print("Saved successfully")
     }
 }
 
