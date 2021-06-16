@@ -30,7 +30,7 @@ struct CameraView: View {
                         Button(action: {}, label: {
                             Spacer()
                             
-                            Button(action: {}, label: {
+                            Button(action: camera.reTake, label: {
                                 Image(systemName: "arrow.triangle.2.circlepath.camera")
                                     .foregroundColor(.black)
                                     .padding()
@@ -91,8 +91,8 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
     @Published var alert = false
     // since we are going to read pic data
     @Published var output = AVCapturePhotoOutput()
+    // preview...
     @Published var preview: AVCaptureVideoPreviewLayer!
-    @objc dynamic var input: AVCaptureDeviceInput!
     
     func Check() {
         // first checking camera has got permission...
@@ -123,31 +123,20 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
         do {
             self.session.beginConfiguration()
             
-            var defaultdevice: AVCaptureDevice?
+            var defaultDevice: AVCaptureDevice?
             
-            if let dualCameraDevice = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .front){
-                defaultdevice = dualCameraDevice
-            } else if let backCameraDevice = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back) {
-                defaultdevice = backCameraDevice
-            } else if let frontCameraDevice = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .front) {
-                defaultdevice = frontCameraDevice
+            if let wideAngleCameraDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+                defaultDevice = wideAngleCameraDevice
+            } else if let trueDepthCameraDevice = AVCaptureDevice.default(.builtInTrueDepthCamera, for: .video, position: .front) {
+                defaultDevice = trueDepthCameraDevice
             }
-            
-            guard let videoDevice = defaultdevice else {
-                print("Default camera is unavailable")
-                return
-            }
-            let input = try AVCaptureDeviceInput(device: videoDevice)
+            let input = try AVCaptureDeviceInput(device: defaultDevice!)
             
             // check and add to session
             
-            /* if self.session.canAddInput(input) {
+            if self.session.canAddInput(input) {
                 self.session.addInput(input)
-            } */
-            guard self.session.canAddInput(input) else { return
             }
-            self.session.addInput(input)
-            
             
             // same for output
             
@@ -160,14 +149,28 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
             print(error.localizedDescription)
         }
     }
-    // take and retake functions
+    
     func takePic() {
         DispatchQueue.global(qos: .background).async {
             self.output.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
             self.session.stopRunning()
             
             DispatchQueue.main.async {
-                withAnimation{self.isTaken.toggle()}
+                withAnimation {
+                    self.isTaken.toggle()
+                }
+            }
+        }
+    }
+    
+    func reTake() {
+        DispatchQueue.global(qos: .background).async {
+            self.session.startRunning()
+            
+            DispatchQueue.main.async {
+                withAnimation{
+                    self.isTaken.toggle()
+                }
             }
         }
     }
@@ -184,6 +187,7 @@ class CameraModel: NSObject,ObservableObject,AVCapturePhotoCaptureDelegate {
 
 struct CameraPreview: UIViewRepresentable {
     @ObservedObject var camera: CameraModel
+    
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
         
